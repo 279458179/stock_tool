@@ -68,11 +68,27 @@ class Scanner:
         return results
 
     def _get_scan_pool(self) -> List[str]:
-        """获取扫描池"""
-        # 可以扫描全市场，或者只扫描关注列表
-        # 这里限制数量以提高效率
-        stocks = self.baostock_api.get_stock_codes()
-        return stocks[:200]  # 扫描前200只
+        """获取扫描池（沪深300成分股）"""
+        # 使用沪深300成分股，避免全市场扫描超时
+        import baostock as bs
+        lg = bs.login()
+        if lg.error_code != '0':
+            logger.error(f"获取股票池失败: {lg.error_msg}")
+            return []
+        rs = bs.query_hs300_stocks()
+        stocks = []
+        while rs.next():
+            row = rs.get_row_data()
+            if len(row) >= 3:
+                code = row[1].strip().lower()
+                name = row[2]
+                if code.startswith(('sh.', 'sz.')) and len(code) == 9:
+                    # 去除前缀，返回简化代码
+                    simple_code = code.replace('sh.', '').replace('sz.', '')
+                    stocks.append(simple_code)
+        bs.logout()
+        logger.info(f"扫描池: 沪深300成分股 {len(stocks)}只")
+        return stocks
 
     def _scan_single_stock(self, code: str) -> Dict[str, Any]:
         """扫描单只股票"""

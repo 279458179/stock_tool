@@ -32,8 +32,13 @@ class ReviewEngine:
         # 1. 获取复盘记录
         reviews = self.review_db.get_reviews_by_days(days)
 
-        # 2. 获取信号统计
-        signals = self.signal_db.get_today_signals()  # TODO: 需要改为按天数获取
+        # 2. 获取信号统计（按天数获取）
+        from datetime import timedelta
+        from database.models import Signal
+        start_date = (datetime.now() - timedelta(days=days)).date()
+        signals = self.signal_db.session.query(Signal).filter(
+            Signal.triggered_at >= start_date
+        ).all()
 
         # 3. 获取候选股状态
         candidates = self.candidate_db.get_all_candidates()
@@ -150,12 +155,11 @@ class ReviewEngine:
 
     def update_review_data(self, days: int = 1):
         """更新复盘数据"""
+        from database.models import Candidate
         # 获取候选股
         start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        candidates = self.candidate_db.session.query(
-            self.candidate_db.get_candidate().__class__
-        ).filter(
-            self.candidate_db.get_candidate().__class__.select_date >= start_date
+        candidates = self.candidate_db.session.query(Candidate).filter(
+            Candidate.select_date >= start_date
         ).all()
 
         for candidate in candidates:
@@ -195,10 +199,9 @@ class ReviewEngine:
 
     def get_performance_by_stock(self, code: str) -> Dict[str, Any]:
         """获取单只股票表现"""
-        reviews = self.review_db.session.query(
-            self.review_db.get_review().__class__
-        ).filter(
-            self.review_db.get_review().__class__.code == code
+        from database.models import ReviewRecord
+        reviews = self.review_db.session.query(ReviewRecord).filter(
+            ReviewRecord.code == code
         ).all()
 
         if not reviews:
