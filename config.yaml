@@ -23,6 +23,17 @@ fundamental:
   roe_min: 10
   profit_years: 3
 
+# 选股器配置（赚钱版 — 2026-05-29 优化）
+selector:
+  min_price: 5.0              # 最低价格5元
+  max_price: 50.0             # 最高价格50元
+  min_score: 50.0             # 最低评分门槛
+  min_signals: 2              # 最少共振信号数
+  max_pct_1d: 8.0             # 追高过滤：1日涨幅>8%排除
+  max_open_pct: 6.0           # 高开>6%且评分<60→剔除
+  max_open_pct_hard: 8.0      # 高开>8%→一律剔除
+  stock_pool: "hs300"         # 选股池：hs300=all_market
+
 # 止盈止损（保守型配置）
 risk:
   default_stop_loss: -0.05    # 默认止损-5%

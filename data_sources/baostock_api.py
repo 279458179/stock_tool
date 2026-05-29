@@ -41,8 +41,21 @@ class BaoStockAPI:
             return []
 
         if date is None:
-            # 使用一个确定的交易日（避免当前日期可能不是交易日）
-            date = '2024-01-15'
+            # 使用最近一个交易日（避免当前日期可能不是交易日）
+            # 从最近7天内找一个有数据的日期
+            for i in range(10):
+                candidate = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+                rs_test = bs.query_all_stock(day=candidate)
+                if rs_test.error_code == '0':
+                    # 检查是否有数据
+                    rows = []
+                    while rs_test.next():
+                        rows.append(rs_test.get_row_data())
+                    if rows:
+                        date = candidate
+                        break
+            if date is None:
+                date = '2026-05-28'  # fallback
 
         rs = bs.query_all_stock(day=date)
         if rs.error_code != '0':

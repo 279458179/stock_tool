@@ -43,6 +43,18 @@ class RiskConfig:
 
 
 @dataclass
+class SelectorConfig:
+    min_price: float = 5.0      # 最低价格5元（排除低价垃圾股）
+    max_price: float = 50.0     # 最高价格50元
+    min_score: float = 50.0     # 最低评分门槛
+    min_signals: int = 2        # 最少共振信号数
+    max_pct_1d: float = 8.0     # 追高过滤：1日涨幅>8%排除
+    max_open_pct: float = 6.0   # 高开>6%且评分<60→剔除
+    max_open_pct_hard: float = 8.0  # 高开>8%→一律剔除
+    stock_pool: str = "hs300"   # 选股池：hs300=all_market
+
+
+@dataclass
 class NotificationConfig:
     desktop: bool = True
     sound: bool = True
@@ -64,6 +76,7 @@ class Config:
     technical: TechnicalConfig = field(default_factory=TechnicalConfig)
     fundamental: FundamentalConfig = field(default_factory=FundamentalConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
+    selector: SelectorConfig = field(default_factory=SelectorConfig)
     notification: NotificationConfig = field(default_factory=NotificationConfig)
     trading_hours: TradingHoursConfig = field(default_factory=TradingHoursConfig)
 
@@ -85,6 +98,8 @@ class Config:
             config.fundamental = FundamentalConfig(**data['fundamental'])
         if 'risk' in data:
             config.risk = RiskConfig(**data['risk'])
+        if 'selector' in data:
+            config.selector = SelectorConfig(**data['selector'])
         if 'notification' in data:
             config.notification = NotificationConfig(**data['notification'])
         if 'trading_hours' in data:
@@ -120,6 +135,16 @@ class Config:
                 'default_stop_loss': self.risk.default_stop_loss,
                 'default_take_profit': self.risk.default_take_profit,
                 'position_alert': self.risk.position_alert,
+            },
+            'selector': {
+                'min_price': self.selector.min_price,
+                'max_price': self.selector.max_price,
+                'min_score': self.selector.min_score,
+                'min_signals': self.selector.min_signals,
+                'max_pct_1d': self.selector.max_pct_1d,
+                'max_open_pct': self.selector.max_open_pct,
+                'max_open_pct_hard': self.selector.max_open_pct_hard,
+                'stock_pool': self.selector.stock_pool,
             },
             'notification': {
                 'desktop': self.notification.desktop,

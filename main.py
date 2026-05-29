@@ -272,11 +272,11 @@ def daemon():
     console.print("[cyan]启动后台服务...[/cyan]")
     console.print("[yellow]定时任务列表:[/yellow]")
     console.print("  09:15 - 集合竞价监控")
-    console.print("  09:30 - 持仓监控启动")
     console.print("  10:30 - 盘中异动扫描(第一次)")
     console.print("  14:00 - 盘中异动扫描(第二次)")
-    console.print("  15:30 - 盘后选股")
     console.print("  16:00 - 复盘报告")
+    console.print("  17:00 - 每日持仓报告")
+    console.print("  20:00 - 盘后选股（次日候选池）")
     console.print("\n[yellow]按Ctrl+C停止[/yellow]")
 
     try:
