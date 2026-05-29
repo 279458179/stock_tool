@@ -1,0 +1,43 @@
+# 数据源配置
+data_source:
+  primary: baostock
+  realtime: tencent
+
+# 选股策略权重
+strategy:
+  technical_weight: 0.4
+  fundamental_weight: 0.3
+  capital_weight: 0.3
+
+# 技术面参数
+technical:
+  ma_periods: [5, 10, 20, 60]
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  volume_ratio: 2.0
+
+# 基本面筛选
+fundamental:
+  pe_max: 30
+  roe_min: 10
+  profit_years: 3
+
+# 止盈止损（保守型配置）
+risk:
+  default_stop_loss: -0.05    # 默认止损-5%
+  default_take_profit: 0.10   # 默认止盈+10%
+  position_alert: 0.03        # 盈亏3%提醒
+
+# 通知配置
+notification:
+  desktop: true               # 桌面弹窗
+  sound: true                 # 声音提醒
+  feishu_webhook: ""          # 飞书机器人webhook
+
+# 交易时间配置
+trading_hours:
+  pre_market_start: "09:15"
+  market_open: "09:30"
+  market_close: "15:00"
+  auction_end: "09:25"
