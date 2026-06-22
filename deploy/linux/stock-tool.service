@@ -1,0 +1,29 @@
+[Unit]
+Description=Stock Tool Daemon - A股投资闭环工具
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/stock_tool
+ExecStart=/opt/stock_tool/venv/bin/python3 /opt/stock_tool/main.py daemon
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stock-tool
+
+# 环境变量
+Environment=PYTHONIOENCODING=utf-8
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/opt/stock_tool/venv/bin:/usr/local/bin:/usr/bin:/bin
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/stock_tool/data /opt/stock_tool/logs
+
+[Install]
+WantedBy=multi-user.target
