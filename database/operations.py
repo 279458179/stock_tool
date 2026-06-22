@@ -96,7 +96,8 @@ class CandidateDB:
         stop_loss: Optional[float] = None,
         position_advice: Optional[str] = None,
         reason: Optional[str] = None,
-        score: Optional[float] = None
+        score: Optional[float] = None,
+        sector: Optional[str] = None
     ) -> Candidate:
         """添加候选股"""
         candidate = Candidate(
@@ -109,7 +110,8 @@ class CandidateDB:
             stop_loss=stop_loss,
             position_advice=position_advice,
             reason=reason,
-            score=score
+            score=score,
+            sector=sector
         )
         self.session.add(candidate)
         self.session.commit()

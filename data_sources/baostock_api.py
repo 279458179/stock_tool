@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,20 +15,40 @@ class BaoStockAPI:
 
     def __init__(self):
         self._logged_in = False
+        self._consecutive_errors = 0
+        self._max_consecutive_errors = 3
 
     def login(self) -> bool:
         """登录BaoStock"""
         if self._logged_in:
             return True
 
-        lg = bs.login()
-        if lg.error_code != '0':
-            logger.error(f"BaoStock登录失败: {lg.error_msg}")
+        try:
+            lg = bs.login()
+            if lg.error_code != '0':
+                logger.error(f"BaoStock登录失败: {lg.error_msg}")
+                return False
+
+            self._logged_in = True
+            self._consecutive_errors = 0
+            logger.info("BaoStock登录成功")
+            return True
+        except Exception as e:
+            logger.error(f"BaoStock登录异常: {e}")
+            self._logged_in = False
             return False
 
-        self._logged_in = True
-        logger.info("BaoStock登录成功")
-        return True
+    def reconnect(self):
+        """强制重连（修复Bad file descriptor）"""
+        logger.info("正在重连BaoStock...")
+        try:
+            if self._logged_in:
+                bs.logout()
+                self._logged_in = False
+        except Exception:
+            pass
+        time.sleep(1)
+        return self.login()
 
     def logout(self):
         """登出BaoStock"""
@@ -127,34 +148,64 @@ class BaoStockAPI:
         if not self.login():
             return pd.DataFrame()
 
-        rs = bs.query_history_k_data_plus(
-            code,
-            "date,code,open,high,low,close,preclose,volume,amount,turn,pctChg",
-            start_date=start_date,
-            end_date=end_date,
-            frequency=frequency,
-            adjustflag=adjustflag
-        )
+        # 添加重试逻辑，修复Bad file descriptor问题
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                rs = bs.query_history_k_data_plus(
+                    code,
+                    "date,code,open,high,low,close,preclose,volume,amount,turn,pctChg",
+                    start_date=start_date,
+                    end_date=end_date,
+                    frequency=frequency,
+                    adjustflag=adjustflag
+                )
 
-        if rs.error_code != '0':
-            logger.error(f"获取K线数据失败: {rs.error_msg}")
-            return pd.DataFrame()
+                if rs.error_code != '0':
+                    # 如果是网络错误，尝试重连
+                    if '网络' in str(rs.error_msg) or 'Bad file descriptor' in str(rs.error_msg) or '接收' in str(rs.error_msg):
+                        self._consecutive_errors += 1
+                        logger.warning(f"获取K线数据失败（{self._consecutive_errors}次）: {rs.error_msg}，尝试重连")
+                        if self._consecutive_errors >= self._max_consecutive_errors:
+                            self.reconnect()
+                        continue
+                    else:
+                        logger.error(f"获取K线数据失败: {rs.error_msg}")
+                        return pd.DataFrame()
 
-        data_list = []
-        while rs.next():
-            data_list.append(rs.get_row_data())
+                self._consecutive_errors = 0  # 成功，重置错误计数
 
-        if not data_list:
-            return pd.DataFrame()
+                data_list = []
+                while rs.next():
+                    data_list.append(rs.get_row_data())
 
-        df = pd.DataFrame(data_list, columns=rs.fields)
-        # 转换数值类型
-        numeric_cols = ['open', 'high', 'low', 'close', 'preclose', 'volume', 'amount', 'turn', 'pctChg']
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                if not data_list:
+                    return pd.DataFrame()
 
-        return df
+                df = pd.DataFrame(data_list, columns=rs.fields)
+                # 转换数值类型
+                numeric_cols = ['open', 'high', 'low', 'close', 'preclose', 'volume', 'amount', 'turn', 'pctChg']
+                for col in numeric_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+                return df
+
+            except Exception as e:
+                error_msg = str(e)
+                if 'Bad file descriptor' in error_msg or '网络' in error_msg or '接收' in error_msg:
+                    self._consecutive_errors += 1
+                    logger.warning(f"K线数据异常（{self._consecutive_errors}次）: {error_msg}，尝试重连")
+                    if self._consecutive_errors >= self._max_consecutive_errors:
+                        self.reconnect()
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                else:
+                    logger.error(f"获取K线数据异常: {e}")
+                    return pd.DataFrame()
+
+        return pd.DataFrame()
 
     def get_recent_k_data(self, code: str, days: int = 60) -> pd.DataFrame:
         """获取最近N天的K线数据"""
@@ -199,9 +250,10 @@ class BaoStockAPI:
         while rs.next():
             row = rs.get_row_data()
             info = {
-                'code': row[0],
-                'industry': row[1],
-                'industryClassification': row[2],
+                'code': row[1],
+                'code_name': row[2],
+                'industry': row[3],
+                'industryClassification': row[4],
             }
             break
 

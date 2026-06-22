@@ -41,6 +41,7 @@ class Candidate(Base):
     stop_loss = Column(Float)  # 止损价
     position_advice = Column(Text)  # 仓位建议
     reason = Column(Text)  # 选入理由
+    sector = Column(String(50))  # 所属行业（板块分散用）
     score = Column(Float)  # 综合评分
     status = Column(String(20), default='pending')  # pending/bought/skipped/expired
     created_at = Column(DateTime, default=datetime.now)

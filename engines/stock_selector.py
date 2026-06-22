@@ -61,8 +61,12 @@ class StockSelector:
         scored_stocks = self._score_stocks(filtered_stocks)
         logger.info(f"评分完成，共{len(scored_stocks)}只股票通过")
 
-        # 5. 排序取前N只
-        top_stocks = sorted(scored_stocks, key=lambda x: x['total_score'], reverse=True)[:limit]
+        # 5. 排序
+        sorted_stocks = sorted(scored_stocks, key=lambda x: x['total_score'], reverse=True)
+
+        # 5.5 板块分散：同一行业最多2只（避免6只电力股集体亏损的悲剧）
+        top_stocks = self._apply_sector_diversification(sorted_stocks, limit)
+        logger.info(f"板块分散后剩余{len(top_stocks)}只（同板块最多2只）")
 
         # 6. 生成买入建议
         candidates = self._generate_recommendations(top_stocks)
@@ -275,8 +279,25 @@ class StockSelector:
                 signal_count += 1
                 signals.append("接近/突破20日高点")
 
-            # 综合评分（信号数 × 20分，最高100分）
-            score = min(signal_count * 20, 100)
+            # === 多维度综合评分（修复：不再是 signal_count * 20 导致全部100分）===
+            # 基础分：信号数 × 15分（最高75分）
+            base_score = signal_count * 15
+
+            # 加分维度1：趋势强度（20日涨幅，0-10分）
+            trend_bonus = min(max(pct_20 * 0.5, 0), 10) if pct_20 > 0 else 0
+
+            # 加分维度2：量价配合强度（量比，0-8分）
+            vol_ratio = vol_5 / vol_20 if vol_20 > 0 else 1.0
+            vol_bonus = min(max((vol_ratio - 1.0) * 5, 0), 8) if vol_ratio > 1 else 0
+
+            # 加分维度3：MACD强度（DIF-DEA距离，0-5分）
+            macd_strength = abs(dif.iloc[-1] - dea.iloc[-1]) / last_close * 1000
+            macd_bonus = min(macd_strength, 5) if dif.iloc[-1] > dea.iloc[-1] else 0
+
+            # 加分维度4：接近高点程度（0-2分）
+            proximity_bonus = min((last_close / high_20 - 0.97) * 100, 2) if last_close >= high_20 * 0.97 else 0
+
+            score = min(int(base_score + trend_bonus + vol_bonus + macd_bonus + proximity_bonus), 95)
 
             # 判断是否通过
             passed = (score >= self.config.selector.min_score and
@@ -301,6 +322,42 @@ class StockSelector:
         except Exception as e:
             logger.error(f"评分{stock.get('code', '?')}失败: {e}")
             return None
+
+    def _apply_sector_diversification(self, sorted_stocks: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+        """板块分散：同一行业最多2只（避免6只电力股集体亏损的悲剧）"""
+        selected = []
+        sector_count = {}  # {行业: 已选数量}
+        max_per_sector = 2
+
+        for stock in sorted_stocks:
+            if len(selected) >= limit:
+                break
+
+            code = stock['code']
+            # 获取行业信息
+            sector = self._get_stock_sector(code)
+            if not sector:
+                sector = '未知行业'
+
+            if sector_count.get(sector, 0) < max_per_sector:
+                stock['sector'] = sector
+                selected.append(stock)
+                sector_count[sector] = sector_count.get(sector, 0) + 1
+                logger.info(f"选中 {stock['name']}({code}) 行业:{sector} 评分:{stock['total_score']}")
+            else:
+                logger.info(f"跳过 {stock['name']}({code}) 行业:{sector}（该板块已满{max_per_sector}只）")
+
+        return selected
+
+    def _get_stock_sector(self, code: str) -> str:
+        """获取股票行业（BaoStock）"""
+        try:
+            info = self.baostock_api.get_stock_industry(code)
+            if info and info.get('industry'):
+                return info['industry']
+        except Exception as e:
+            logger.warning(f"获取{code}行业信息失败: {e}")
+        return ''
 
     def _calc_pct(self, df: pd.DataFrame, days: int) -> float:
         """计算N日涨幅"""
@@ -344,12 +401,22 @@ class StockSelector:
 
             # 选入理由
             reason = "；".join(stock.get('signals', [])[:5]) or "综合评分达标"
+            sector = stock.get('sector', '未知')
+
+            # 仓位建议（升级：单只不超过总资金15%）
+            if score >= 80:
+                position_advice = "建议仓位：单只不超过总资金15%"
+            elif score >= 60:
+                position_advice = "建议仓位：单只不超过总资金10%"
+            else:
+                position_advice = "建议仓位：单只不超过总资金5%"
 
             candidate = {
                 'code': stock['code'].replace('sh.', '').replace('sz.', ''),
                 'name': stock['name'],
                 'score': score,
                 'signal_count': stock['signal_count'],
+                'sector': sector,
                 'buy_range_low': buy_range_low,
                 'buy_range_high': buy_range_high,
                 'target_price': target_price,
@@ -382,5 +449,6 @@ class StockSelector:
                 stop_loss=candidate['stop_loss'],
                 position_advice=candidate['position_advice'],
                 reason=candidate['reason'],
-                score=candidate['score']
+                score=candidate['score'],
+                sector=candidate.get('sector', '未知')
             )
