@@ -509,29 +509,53 @@ class SchedulerManager:
             # 第二部分：持仓明细
             if positions:
                 lines.append("━━━ 持仓明细 ━━━")
+                # 获取实时行情
+                codes = [p.code for p in positions]
+                quotes = tracker.realtime_api.get_batch_quotes(codes)
+                quote_map = {q['code']: q for q in quotes}
+
+                # 构建持仓摘要列表
+                pos_list = []
+                for p in positions:
+                    q = quote_map.get(p.code, {})
+                    current = q.get('price', p.cost)
+                    profit_val = (current - p.cost) * p.shares
+                    profit_p = (current - p.cost) / p.cost * 100 if p.cost > 0 else 0
+                    pos_list.append({
+                        'name': p.name or '?',
+                        'code': p.code,
+                        'cost': p.cost,
+                        'current': current,
+                        'shares': p.shares,
+                        'profit': profit_val,
+                        'profit_pct': profit_p,
+                        'stop_loss': p.stop_loss or 0,
+                        'stop_profit': p.target_price or 0,
+                    })
+
                 # 按盈亏排序
-                sorted_positions = sorted(positions, key=lambda x: x.get('profit_pct', 0), reverse=True)
-                
+                sorted_positions = sorted(pos_list, key=lambda x: x['profit_pct'], reverse=True)
+
                 for p in sorted_positions:
-                    name = p.get('name', '?')
-                    code = p.get('code', '?')
-                    cost = p.get('cost', 0)
-                    current = p.get('current', 0)
-                    shares = p.get('shares', 0)
-                    profit_val = p.get('profit', 0)
-                    profit_p = p.get('profit_pct', 0)
-                    
+                    name = p['name']
+                    code = p['code']
+                    cost = p['cost']
+                    current = p['current']
+                    shares = p['shares']
+                    profit_val = p['profit']
+                    profit_p = p['profit_pct']
+
                     icon = "🔴" if profit_val >= 0 else "🟢"
                     lines.append(f"{icon} {name}（{code}）")
                     lines.append(f"   成本{cost:.3f} → 现价{current:.3f} | {shares}股")
                     lines.append(f"   盈亏: {profit_val:+,.0f}元 ({profit_p:+.2f}%)")
-                    
+
                     # 止损止盈状态
-                    stop_loss = p.get('stop_loss', 0)
-                    stop_profit = p.get('stop_profit', 0)
+                    stop_loss = p['stop_loss']
+                    stop_profit = p['stop_profit']
                     dist_stop = (current - stop_loss) / stop_loss * 100 if stop_loss > 0 else 0
                     dist_target = (stop_profit - current) / current * 100 if stop_profit > 0 else 0
-                    
+
                     if profit_p >= 0:
                         lines.append(f"   🎯 距止盈{stop_profit:.2f}元还有{dist_target:.1f}%")
                     else:
@@ -542,12 +566,12 @@ class SchedulerManager:
                 best = sorted_positions[0]
                 worst = sorted_positions[-1]
                 lines.append("━━━ 今日表现 ━━━")
-                lines.append(f"🏆 最佳: {best['name']} {best.get('profit_pct', 0):+.2f}%")
-                lines.append(f"💀 最差: {worst['name']} {worst.get('profit_pct', 0):+.2f}%")
-                
+                lines.append(f"🏆 最佳: {best['name']} {best['profit_pct']:+.2f}%")
+                lines.append(f"💀 最差: {worst['name']} {worst['profit_pct']:+.2f}%")
+
                 # 盈亏分布
-                profit_count = len([p for p in positions if p.get('profit', 0) >= 0])
-                loss_count = len(positions) - profit_count
+                profit_count = len([p for p in pos_list if p['profit'] >= 0])
+                loss_count = len(pos_list) - profit_count
                 lines.append(f"📊 盈亏比: 红{profit_count}绿{loss_count}")
                 lines.append("")
 
@@ -573,7 +597,7 @@ class SchedulerManager:
                 lines.append("📈 整体盈利，持有待涨，注意止盈节奏")
             
             # 提醒重点关注股
-            danger_stocks = [p for p in positions if p.get('profit_pct', 0) < -2]
+            danger_stocks = [p for p in pos_list if p['profit_pct'] < -2]
             if danger_stocks:
                 names = "/".join([p['name'] for p in danger_stocks])
                 lines.append(f"⚠️ 重点关注: {names}（亏损超2%，注意止损）")
