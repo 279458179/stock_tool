@@ -222,9 +222,14 @@ class TencentRealtimeAPI:
             trading/pre_market/auction/closed
         """
         now = datetime.now()
+
+        # 周末直接返回closed（周六=5，周日=6）
+        if now.weekday() >= 5:
+            return "closed"
+
         current_time = now.strftime("%H:%M")
 
-        # A股交易时间
+        # A股交易时间（仅工作日）
         # 09:15-09:25 集合竞价
         # 09:30-11:30 上午交易
         # 13:00-15:00 下午交易
