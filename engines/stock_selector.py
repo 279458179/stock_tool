@@ -78,25 +78,39 @@ class StockSelector:
         return candidates
 
     def _get_stock_pool(self) -> List[Dict[str, str]]:
-        """获取股票池（沪深300成分股）"""
-        logger.info("获取沪深300成分股...")
+        """获取股票池（沪深300 + 中证500成分股）
+        2026-06-30 扩大范围：从300只→约800只，覆盖更多强势股"""
+        logger.info("获取沪深300 + 中证500成分股...")
         lg = bs.login()
         if lg.error_code != '0':
             logger.error(f"BaoStock登录失败: {lg.error_msg}")
             return []
 
+        # 沪深300
         rs = bs.query_hs300_stocks()
-        stocks = []
+        stock_dict = {}
         while rs.next():
             row = rs.get_row_data()
             if len(row) >= 3:
-                code = row[1].strip().lower()  # sh.600000
+                code = row[1].strip().lower()
                 name = row[2]
                 if code.startswith(('sh.', 'sz.')) and len(code) == 9:
-                    stocks.append({'code': code, 'name': name})
+                    stock_dict[code] = {'code': code, 'name': name}
+        hs300_count = len(stock_dict)
 
+        # 中证500
+        rs = bs.query_zz500_stocks()
+        while rs.next():
+            row = rs.get_row_data()
+            if len(row) >= 3:
+                code = row[1].strip().lower()
+                name = row[2]
+                if code.startswith(('sh.', 'sz.')) and len(code) == 9:
+                    stock_dict[code] = {'code': code, 'name': name}
+
+        stocks = list(stock_dict.values())
         bs.logout()
-        logger.info(f"沪深300成分股: {len(stocks)} 只")
+        logger.info(f"沪深300: {hs300_count}只 + 中证500: 合并去重后共{len(stocks)}只")
         return stocks
 
     def _batch_fetch_k_data(self, stocks: List[Dict[str, str]]) -> Dict[str, Optional[pd.DataFrame]]:

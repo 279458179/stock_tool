@@ -68,26 +68,37 @@ class Scanner:
         return results
 
     def _get_scan_pool(self) -> List[str]:
-        """获取扫描池（沪深300成分股）"""
-        # 使用沪深300成分股，避免全市场扫描超时
+        """获取扫描池（沪深300 + 中证500成分股）
+        2026-06-30 扩大范围：从300只→约800只"""
         import baostock as bs
         lg = bs.login()
         if lg.error_code != '0':
             logger.error(f"获取股票池失败: {lg.error_msg}")
             return []
+        
+        # 合并沪深300 + 中证500
+        code_set = set()
+        
         rs = bs.query_hs300_stocks()
-        stocks = []
         while rs.next():
             row = rs.get_row_data()
             if len(row) >= 3:
                 code = row[1].strip().lower()
-                name = row[2]
                 if code.startswith(('sh.', 'sz.')) and len(code) == 9:
-                    # 去除前缀，返回简化代码
-                    simple_code = code.replace('sh.', '').replace('sz.', '')
-                    stocks.append(simple_code)
+                    code_set.add(code)
+        
+        rs = bs.query_zz500_stocks()
+        while rs.next():
+            row = rs.get_row_data()
+            if len(row) >= 3:
+                code = row[1].strip().lower()
+                if code.startswith(('sh.', 'sz.')) and len(code) == 9:
+                    code_set.add(code)
+        
+        # 转换为简化代码
+        stocks = [code.replace('sh.', '').replace('sz.', '') for code in code_set]
         bs.logout()
-        logger.info(f"扫描池: 沪深300成分股 {len(stocks)}只")
+        logger.info(f"扫描池: 沪深300+中证500 共{len(stocks)}只")
         return stocks
 
     def _scan_single_stock(self, code: str) -> Dict[str, Any]:
